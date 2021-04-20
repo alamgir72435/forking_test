@@ -1,22 +1,31 @@
-const app = require("express")();
+const cluster = require("cluster");
 
-const { fork } = require("child_process");
+if (cluster.isMaster) {
+  const worker = cluster.fork();
+  let timeout;
 
-app.get("/isprime", (req, res) => {
-  // res.setHeader("Access-Control-Allow-Origin", "*");
-  // const jsonResponse = isPrime(parseInt(req.query.number));
-  // res.send(jsonResponse);
+  worker.on("listening", (address) => {
+    worker.send("shutdown");
+    worker.disconnect();
+    timeout = setTimeout(() => {
+      worker.kill();
+    }, 2000);
+  });
 
-  const childProcess = fork("./isPrime.js");
-  childProcess.send({ number: parseInt(req.query.number) });
-  childProcess.on("message", (message) => res.send(message));
-});
+  worker.on("disconnect", () => {
+    clearTimeout(timeout);
+  });
+} else if (cluster.isWorker) {
+  const net = require("net");
+  const server = net.createServer((socket) => {
+    // Connections never end
+  });
 
-app.get("/", (req, res) => {
-  const childProcess = fork("./test.js");
+  server.listen(8000);
 
-  childProcess.send({ number: 5 });
-  childProcess.on("message", (message) => res.send(message));
-});
-
-app.listen(8081, () => console.log("Listening on 8081"));
+  process.on("message", (msg) => {
+    if (msg === "shutdown") {
+      // Initiate graceful close of any connections to server
+    }
+  });
+}
